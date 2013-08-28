@@ -3,6 +3,7 @@ package com.squareup.okhttp.internal.spdy;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.net.ProtocolException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -100,8 +101,8 @@ final class Hpack {
     Reader(DataInputStream in, boolean client) {
       this.in = in;
       this.headerTable = new ArrayList<String>(client
-          ? INITIAL_CLIENT_TO_SERVER_HEADER_TABLE
-          : INITIAL_SERVER_TO_CLIENT_HEADER_TABLE);
+          ? INITIAL_SERVER_TO_CLIENT_HEADER_TABLE
+          : INITIAL_CLIENT_TO_SERVER_HEADER_TABLE);
     }
 
     /**
@@ -136,6 +137,10 @@ final class Hpack {
         } else {
           throw new AssertionError();
         }
+      }
+
+      if (bytesLeft < 0) {
+        throw new ProtocolException();
       }
     }
 
@@ -184,8 +189,8 @@ final class Hpack {
 
     private void readLiteralHeaderWithIncrementalIndexingIndexedName(int nameIndex)
         throws IOException {
-      int index = headerTable.size();
-      String name = getName(nameIndex);
+      int index = headerTable.size() / 2;
+      String name = getName(nameIndex); // Firefox uses nameIndex - 1.
       String value = readString();
       appendToHeaderTable(name, value);
       emittedHeaders.add(name);
@@ -194,7 +199,7 @@ final class Hpack {
     }
 
     private void readLiteralHeaderWithIncrementalIndexingNewName() throws IOException {
-      int index = headerTable.size();
+      int index = headerTable.size() / 2;
       String name = readString();
       String value = readString();
       appendToHeaderTable(name, value);
@@ -233,7 +238,7 @@ final class Hpack {
     }
 
     private void appendToHeaderTable(String name, String value) {
-      insertIntoHeaderTable(headerTable.size() * 2, name, value);
+      insertIntoHeaderTable(headerTable.size() / 2, name, value);
     }
 
     private void replaceInHeaderTable(int index, String name, String value) {
@@ -256,7 +261,7 @@ final class Hpack {
         return; // New values won't fit in the buffer; skip 'em.
       }
 
-      if (index == 0) index = 0;
+      if (index < 0) index = 0;
 
       headerTable.add(index * 2, name);
       headerTable.add(index * 2 + 1, value);
